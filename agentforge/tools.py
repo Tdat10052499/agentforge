@@ -30,9 +30,7 @@ def web_search_func(query: str) -> str:
         return "Web search requires a valid query."
 
     normalized = query.strip()
-    if os.getenv("AGENTFORGE_USE_REAL_SEARCH", "1") != "1":
-        return f"Web search for: '{normalized}'\n\nThis is a demo fallback. Set AGENTFORGE_USE_REAL_SEARCH=1 to enable live search."
-
+    
     try:
         response = requests.get(
             "https://api.duckduckgo.com/",
@@ -47,29 +45,46 @@ def web_search_func(query: str) -> str:
         response.raise_for_status()
         payload = response.json()
 
-        abstract = payload.get("AbstractText")
-        abstract_url = payload.get("AbstractURL")
-        related_topics = payload.get("RelatedTopics", [])
-
+        # Thử lấy Abstract trước
+        abstract = payload.get("AbstractText", "").strip()
         if abstract:
             result_lines = [f"Search results for: '{normalized}'", "", abstract]
+            abstract_url = payload.get("AbstractURL")
             if abstract_url:
                 result_lines.append(f"Source: {abstract_url}")
             return "\n".join(result_lines)
 
+        # Nếu không có Abstract, dùng RelatedTopics
+        related_topics = payload.get("RelatedTopics", [])
         if related_topics:
             result_lines = [f"Search results for: '{normalized}'", ""]
-            for topic in related_topics[:5]:
-                text = topic.get("Text")
+            count = 0
+            for topic in related_topics:
+                # Skip categories
+                if "Topics" in topic:
+                    continue
+                
+                text = topic.get("Text", "").strip()
+                first_url = topic.get("FirstURL", "")
+                
                 if text:
-                    result_lines.append(f"- {text}")
-            return "\n".join(result_lines)
+                    result_lines.append(f"• {text}")
+                    if first_url:
+                        result_lines.append(f"  Link: {first_url}")
+                    count += 1
+                    
+                if count >= 5:  # Giới hạn 5 kết quả
+                    break
+            
+            if count > 0:
+                return "\n".join(result_lines)
 
-        return f"No live results found for '{normalized}'."
+        return f"No results found for '{normalized}'. Try a different search term."
+        
     except Exception as exc:
         return (
-            f"Web search failed for '{normalized}' due to network or API error: {type(exc).__name__}: {exc}\n\n"
-            "Fallback: you can still use the tool in demo mode."
+            f"Web search failed: {type(exc).__name__}: {exc}\n"
+            "This might be a network issue. Try again later."
         )
 
 
