@@ -16,30 +16,64 @@ def test_tool_run():
     assert tool.run("hello") == "Echo: hello"
 
 
-def test_web_search_tool_returns_search_results(monkeypatch):
+def test_web_search_tool_uses_instant_answer_and_cleans_query_prefix(monkeypatch):
     response = Mock()
-    response.text = (
+    response.json.return_value = {
+        "AbstractText": "Python is a general-purpose programming language.",
+        "AbstractURL": "https://example.com/python",
+    }
+    request = Mock(return_value=response)
+    monkeypatch.setattr("agentforge.tools.requests.get", request)
+
+    result = WebSearchTool.run("search for Python programming")
+
+    assert "Python is a general-purpose programming language." in result
+    assert "https://example.com/python" in result
+    request.assert_called_once_with(
+        "https://api.duckduckgo.com/",
+        params={
+            "q": "Python programming",
+            "format": "json",
+            "no_html": 1,
+            "skip_disambig": 1,
+        },
+        timeout=10,
+    )
+
+
+def test_web_search_tool_returns_search_results(monkeypatch):
+    api_response = Mock()
+    api_response.json.return_value = {}
+    html_response = Mock()
+    html_response.text = (
         '<a class="result__a" href="https://example.com/python">Python &amp; programming</a>'
     )
-    request = Mock(return_value=response)
+    request = Mock(side_effect=[api_response, html_response])
     monkeypatch.setattr("agentforge.tools.requests.get", request)
 
     response = WebSearchTool.run("AI agents")
 
     assert "Python & programming" in response
     assert "https://example.com/python" in response
-    request.assert_called_once_with(
+    assert request.call_args_list[1].args == (
         "https://html.duckduckgo.com/html/",
-        params={"q": "AI agents"},
-        headers={"User-Agent": "Mozilla/5.0"},
-        timeout=10,
     )
+    assert request.call_args_list[1].kwargs == {
+        "params": {"q": "AI agents"},
+        "headers": {"User-Agent": "Mozilla/5.0"},
+        "timeout": 10,
+    }
 
 
 def test_web_search_tool_reports_no_results(monkeypatch):
-    response = Mock()
-    response.text = "<html><body>No results</body></html>"
-    monkeypatch.setattr("agentforge.tools.requests.get", Mock(return_value=response))
+    api_response = Mock()
+    api_response.json.return_value = {}
+    html_response = Mock()
+    html_response.text = "<html><body>No results</body></html>"
+    monkeypatch.setattr(
+        "agentforge.tools.requests.get",
+        Mock(side_effect=[api_response, html_response]),
+    )
 
     result = WebSearchTool.run("unknown query")
 

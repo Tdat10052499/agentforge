@@ -1,6 +1,7 @@
 """Tool definitions for agents."""
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -62,12 +63,20 @@ class Tool:
 # Built-in tool implementations
 
 def web_search_func(query: str) -> str:
-    """Search the web using DuckDuckGo's public API."""
+    """Search the web using DuckDuckGo's Instant Answer API and HTML results."""
     if not query or not query.strip():
         return "Web search requires a valid query."
 
-    normalized = query.strip()
-    
+    normalized = re.sub(
+        r"^(?:please\s+)?(?:search(?:\s+for)?|look\s+up|lookup|find|research)\s+",
+        "",
+        query.strip(),
+        flags=re.IGNORECASE,
+    ).strip()
+    if not normalized:
+        return "Web search requires a valid query."
+
+    api_error = None
     try:
         response = requests.get(
             "https://api.duckduckgo.com/",
@@ -82,43 +91,73 @@ def web_search_func(query: str) -> str:
         response.raise_for_status()
         payload = response.json()
 
-        # Thử lấy Abstract trước (luôn luôn có)
         abstract = payload.get("AbstractText", "").strip()
         if abstract:
             result_lines = [f"Search results for: '{normalized}'", "", abstract]
             abstract_url = payload.get("AbstractURL")
             if abstract_url:
-                result_lines.append(f"\nSource: {abstract_url}")
+                result_lines.append(f"Source: {abstract_url}")
             return "\n".join(result_lines)
 
-        # Nếu không có Abstract, dùng RelatedTopics
         related_topics = payload.get("RelatedTopics", [])
         if related_topics:
             result_lines = [f"Search results for: '{normalized}'", ""]
             count = 0
-            for topic in related_topics:
+            for topic in _flatten_related_topics(related_topics):
                 text = topic.get("Text", "").strip()
                 first_url = topic.get("FirstURL", "")
-                
-                if text and "Category" not in text:  # Skip categories
-                    result_lines.append(f"• {text}")
-                    if first_url:
-                        result_lines.append(f"  {first_url}")
+                if text and first_url and not text.endswith(" Category"):
+                    result_lines.append(f"- {text}")
+                    result_lines.append(f"  Link: {first_url}")
                     count += 1
-                    
-                if count >= 5:  # Limit to 5 results
+                if count >= 5:
                     break
-            
+
             if count > 0:
                 return "\n".join(result_lines)
+    except (requests.RequestException, ValueError) as exc:
+        api_error = exc
 
-        return f"No results found for '{normalized}'. Try a different search term."
-        
-    except Exception as exc:
-        return (
-            f"Web search failed: {type(exc).__name__}: {exc}\n"
-            "This might be a network issue. Try again later."
+    try:
+        response = requests.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": normalized},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10,
         )
+        response.raise_for_status()
+        parser = _DuckDuckGoResultsParser()
+        parser.feed(response.text)
+        results = [
+            result for result in parser.results
+            if result["title"].strip() and result["url"]
+        ][:5]
+        if results:
+            result_lines = [f"Search results for: '{normalized}'", ""]
+            for result in results:
+                result_lines.append(f"- {result['title'].strip()}")
+                result_lines.append(f"  Link: {result['url']}")
+            return "\n".join(result_lines)
+    except requests.RequestException as exc:
+        if api_error:
+            return (
+                "Web search failed: "
+                f"Instant Answer API {type(api_error).__name__}: {api_error}; "
+                f"HTML search {type(exc).__name__}: {exc}"
+            )
+        return f"Web search failed: {type(exc).__name__}: {exc}"
+
+    if api_error:
+        return f"Web search failed: {type(api_error).__name__}: {api_error}"
+    return f"No results found for '{normalized}'. Try a different search term."
+
+
+def _flatten_related_topics(topics):
+    for topic in topics:
+        if "Topics" in topic:
+            yield from _flatten_related_topics(topic["Topics"])
+        else:
+            yield topic
 
 
 def file_reader_func(query: str) -> str:
