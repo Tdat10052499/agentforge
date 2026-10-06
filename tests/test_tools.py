@@ -1,61 +1,40 @@
-"""Tests for the agent module."""
+"""Tests for the tools module."""
 
-from agentforge import Agent, Tool
-
-
-def test_agent_creation():
-    agent = Agent(name="test-agent")
-    assert agent.name == "test-agent"
-    assert agent.model == "gpt-4o-mini"
-    assert len(agent.tools) == 0
-    assert agent.task_count == 0
+from agentforge.tools import Tool, WebSearchTool, FileReaderTool, FileWriterTool
 
 
-def test_agent_add_tool():
-    agent = Agent(name="test-agent")
-    tool = Tool(name="test_tool", description="A test tool", func=lambda x: f"Result: {x}")
-    agent.add_tool(tool)
-    assert "test_tool" in agent.tools
+def test_tool_creation():
+    tool = Tool(name="echo", description="Echo tool", func=lambda x: f"Echo: {x}")
+    assert tool.name == "echo"
+    assert tool.description == "Echo tool"
 
 
-def test_agent_run():
-    agent = Agent(name="test-agent")
-    tool = Tool(name="hello_tool", description="Greeting tool", func=lambda x: f"Hello, {x}!")
-    agent.add_tool(tool)
-    result = agent.run("world")
-    assert "task" in result.lower() or "hello" in result.lower()
-    assert agent.task_count == 1
+def test_tool_run():
+    tool = Tool(name="echo", description="Echo tool", func=lambda x: f"Echo: {x}")
+    assert tool.run("hello") == "Echo: hello"
 
 
-def test_agent_remove_tool():
-    agent = Agent(name="test-agent")
-    tool = Tool(name="test_tool", description="A test tool", func=lambda x: x)
-    agent.add_tool(tool)
-    assert agent.remove_tool("test_tool") is True
-    assert agent.remove_tool("missing") is False
+def test_web_search_tool():
+    response = WebSearchTool.run("AI agents")
+    assert isinstance(response, str)
+    assert len(response) > 0
 
 
-def test_agent_tools_description():
-    agent = Agent(name="test-agent")
-    description = agent.get_tools_description()
-    assert "No tools" in description
-
-    tool = Tool(name="demo_tool", description="Demo tool", func=lambda x: x)
-    agent.add_tool(tool)
-    description = agent.get_tools_description()
-    assert "demo_tool" in description
-    assert "Demo tool" in description
+def test_file_reader_tool_usage_message():
+    response = FileReaderTool.run("hello")
+    assert "Usage" in response
 
 
-def test_memory_summary():
-    agent = Agent(name="test-agent")
-    _ = agent.run("First task")
-    summary = agent.get_memory_summary()
-    assert "Tasks completed: 1" in summary
-    assert "Memory entries" in summary
+def test_file_writer_tool_usage_message():
+    response = FileWriterTool.run("hello")
+    assert "Usage" in response
 
 
-def test_agent_string_repr():
-    agent = Agent(name="test-agent")
-    assert "test-agent" in str(agent)
-    assert "gpt-4o-mini" in str(agent)
+def test_tool_error_handling():
+    def bad_func(_):
+        raise ValueError("explode")
+
+    tool = Tool(name="bad", description="bad", func=bad_func)
+    result = tool.run("x")
+    assert "Tool error" in result
+    assert "ValueError" in result

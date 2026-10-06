@@ -28,7 +28,9 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = []
+dependencies = [
+    "requests>=2.31.0",
+]
 
 [project.optional-dependencies]
 dev = [
