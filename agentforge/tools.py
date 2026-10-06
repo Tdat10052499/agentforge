@@ -3,9 +3,46 @@
 import os
 import subprocess
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from typing import Callable
+from urllib.parse import parse_qs, urlparse
 
 import requests
+
+
+class _DuckDuckGoResultsParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.results = []
+        self._capture_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        classes = attributes.get("class", "").split()
+        if tag == "a" and "result__a" in classes:
+            self.results.append(
+                {"title": "", "url": self._destination_url(attributes.get("href", ""))}
+            )
+            self._capture_depth = 1
+        elif self._capture_depth:
+            self._capture_depth += 1
+
+    def handle_endtag(self, tag):
+        if self._capture_depth:
+            self._capture_depth -= 1
+
+    def handle_data(self, data):
+        if self._capture_depth and self.results:
+            self.results[-1]["title"] += data
+
+    @staticmethod
+    def _destination_url(href):
+        parsed_url = urlparse(href)
+        if parsed_url.path.endswith("/l/"):
+            destination = parse_qs(parsed_url.query).get("uddg")
+            if destination:
+                return destination[0]
+        return href
 
 
 @dataclass
@@ -45,13 +82,13 @@ def web_search_func(query: str) -> str:
         response.raise_for_status()
         payload = response.json()
 
-        # Thử lấy Abstract trước
+        # Thử lấy Abstract trước (luôn luôn có)
         abstract = payload.get("AbstractText", "").strip()
         if abstract:
             result_lines = [f"Search results for: '{normalized}'", "", abstract]
             abstract_url = payload.get("AbstractURL")
             if abstract_url:
-                result_lines.append(f"Source: {abstract_url}")
+                result_lines.append(f"\nSource: {abstract_url}")
             return "\n".join(result_lines)
 
         # Nếu không có Abstract, dùng RelatedTopics
@@ -60,20 +97,16 @@ def web_search_func(query: str) -> str:
             result_lines = [f"Search results for: '{normalized}'", ""]
             count = 0
             for topic in related_topics:
-                # Skip categories
-                if "Topics" in topic:
-                    continue
-                
                 text = topic.get("Text", "").strip()
                 first_url = topic.get("FirstURL", "")
                 
-                if text:
+                if text and "Category" not in text:  # Skip categories
                     result_lines.append(f"• {text}")
                     if first_url:
-                        result_lines.append(f"  Link: {first_url}")
+                        result_lines.append(f"  {first_url}")
                     count += 1
                     
-                if count >= 5:  # Giới hạn 5 kết quả
+                if count >= 5:  # Limit to 5 results
                     break
             
             if count > 0:
