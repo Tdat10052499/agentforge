@@ -1,44 +1,125 @@
-"""Configuration management for agents."""
+"""Core agent implementation."""
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+import os
+from typing import Dict
+
+from .memory import Memory
+from .tools import Tool
 
 
-@dataclass
-class AgentConfig:
-    """Configuration for an agent."""
-    name: str
-    model: str = "gpt-4o-mini"
-    temperature: float = 0.7
-    max_tokens: int = 2000
-    tools: List[str] = field(default_factory=list)
-    system_prompt: Optional[str] = None
-    memory_size: int = 100
+class Agent:
+    """An AI agent that can use tools and maintain memory."""
 
-    def to_dict(self) -> Dict:
-        """Convert config to dictionary.
-        
-        Returns:
-            Dictionary representation.
-        """
-        return {
-            "name": self.name,
-            "model": self.model,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "tools": self.tools,
-            "system_prompt": self.system_prompt,
-            "memory_size": self.memory_size,
-        }
+    def __init__(self, name: str, model: str = "gpt-4o-mini"):
+        self.name = name
+        self.model = model or os.getenv("AGENTFORGE_MODEL", "gpt-4o-mini")
+        self.tools: Dict[str, Tool] = {}
+        self.memory = Memory()
+        self.task_count = 0
 
-    @classmethod
-    def from_dict(cls, config_dict: Dict) -> "AgentConfig":
-        """Create config from dictionary.
-        
-        Args:
-            config_dict: Dictionary with config values.
-            
-        Returns:
-            AgentConfig instance.
-        """
-        return cls(**config_dict)
+    def add_tool(self, tool: Tool) -> None:
+        self.tools[tool.name] = tool
+
+    def remove_tool(self, tool_name: str) -> bool:
+        if tool_name in self.tools:
+            del self.tools[tool_name]
+            return True
+        return False
+
+    def get_tools_description(self) -> str:
+        if not self.tools:
+            return "No tools available."
+
+        lines = ["Available tools:"]
+        for tool_name, tool in self.tools.items():
+            lines.append(f"  - {tool_name}: {tool.description}")
+        return "\n".join(lines)
+
+    def run(self, user_input: str) -> str:
+        self.task_count += 1
+        self.memory.add(user_input, role="user")
+        response = self._think_and_execute(user_input)
+        self.memory.add(response, role="assistant")
+        return response
+
+    def _think_and_execute(self, user_input: str) -> str:
+        lowered = user_input.lower()
+
+        llm_response = self._call_llm_if_available(user_input)
+        if llm_response:
+            return llm_response
+
+        if any(keyword in lowered for keyword in ["search", "find", "lookup", "latest", "news", "research"]):
+            if "web_search" in self.tools:
+                return self._format_response("web_search", self.tools["web_search"].run(user_input))
+
+        if any(keyword in lowered for keyword in ["read", "open", "file", "load", "summarize"]):
+            if "file_reader" in self.tools:
+                payload = user_input if "read:" in user_input else f"read:{user_input}"
+                return self._format_response("file_reader", self.tools["file_reader"].run(payload))
+
+        if any(keyword in lowered for keyword in ["write", "save", "create", "store"]):
+            if "file_writer" in self.tools:
+                payload = user_input if "write:" in user_input else f"write:{user_input}"
+                return self._format_response("file_writer", self.tools["file_writer"].run(payload))
+
+        if any(keyword in lowered for keyword in ["run", "execute", "command", "bash", "shell"]):
+            if "command_runner" in self.tools:
+                return self._format_response("command_runner", self.tools["command_runner"].run(user_input))
+
+        return self._default_response(user_input)
+
+    def _call_llm_if_available(self, user_input: str):
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return None
+
+        try:
+            from openai import OpenAI
+        except ImportError:
+            return None
+
+        try:
+            client = OpenAI(api_key=api_key)
+            completion = client.chat.completions.create(
+                model=self.model,
+                temperature=0.7,
+                messages=[
+                    {"role": "system", "content": "You are a helpful AI assistant."},
+                    {"role": "user", "content": user_input},
+                ],
+            )
+            return completion.choices[0].message.content
+        except Exception:
+            return None
+
+    def _format_response(self, tool_name: str, tool_output: str) -> str:
+        return f"[Using {tool_name}]\n\n{tool_output}"
+
+    def _default_response(self, user_input: str) -> str:
+        return (
+            f"Agent '{self.name}' received task: \"{user_input}\"\n\n"
+            "I don't have a direct tool for this task yet.\n\n"
+            f"{self.get_tools_description()}\n\n"
+            "Try using keywords like 'search', 'read', 'write', or 'run'."
+        )
+
+    def get_memory_summary(self) -> str:
+        return (
+            "Agent Memory Summary\n"
+            "==================\n"
+            f"Agent: {self.name}\n"
+            f"Model: {self.model}\n"
+            f"Tasks completed: {self.task_count}\n"
+            f"Memory entries: {len(self.memory)}\n"
+            f"Tools available: {len(self.tools)}\n"
+        )
+
+    def __str__(self) -> str:
+        return f"Agent(name='{self.name}', model='{self.model}', tools={len(self.tools)})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+__all__ = ["Agent"]

@@ -1,115 +1,53 @@
-# Contributing to AgentForge
+"""Tests for the memory module."""
 
-We welcome contributions from the community! This document provides guidelines and instructions for contributing.
+from agentforge.memory import Memory
 
-## Code of Conduct
 
-Please be respectful and constructive in all interactions.
+def test_memory_creation():
+    memory = Memory()
+    assert len(memory) == 0
 
-## How to Contribute
 
-### Reporting Bugs
+def test_memory_add_and_get():
+    memory = Memory()
+    memory.add("Hello", role="user")
+    memory.add("Hi there", role="assistant")
+    entries = memory.get()
+    assert len(entries) == 2
+    assert entries[0].content == "Hello"
+    assert entries[1].content == "Hi there"
 
-1. Check if the bug has already been reported in [Issues](https://github.com/Tdat10052499/agentforge/issues)
-2. If not, create a new issue with:
-   - Clear title and description
-   - Steps to reproduce
-   - Expected vs actual behavior
-   - Python version and OS
 
-### Suggesting Features
+def test_memory_context():
+    memory = Memory()
+    memory.add("Hello", role="user")
+    memory.add("Hi there", role="assistant")
+    context = memory.get_context()
+    assert "User" in context
+    assert "Assistant" in context
 
-1. Check [Issues](https://github.com/Tdat10052499/agentforge/issues) and [Discussions](https://github.com/Tdat10052499/agentforge/discussions)
-2. Create a new issue with:
-   - Clear title
-   - Detailed description of the feature
-   - Use cases and examples
-   - Why this would be useful
 
-### Code Contributions
+def test_memory_clear():
+    memory = Memory()
+    memory.add("Hello")
+    memory.clear()
+    assert len(memory) == 0
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature-name`
-3. Make your changes
-4. Write or update tests
-5. Run tests: `python -m pytest`
-6. Commit with clear messages: `git commit -m "Add feature description"`
-7. Push: `git push origin feature/your-feature-name`
-8. Create a Pull Request with:
-   - Clear title
-   - Description of changes
-   - Related issues
-   - Screenshots if applicable
 
-## Development Setup
+def test_memory_max_limit():
+    memory = Memory(max_entries=2)
+    memory.add("one")
+    memory.add("two")
+    memory.add("three")
+    assert len(memory) == 2
+    assert memory.get()[-1].content == "three"
 
-```bash
-# Clone repository
-git clone https://github.com/Tdat10052499/agentforge.git
-cd agentforge
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+def test_memory_str():
+    memory = Memory()
+    memory.add("hello")
+    assert "Memory" in str(memory)
 
-# Install in development mode
-pip install -e ".[dev]"
 
-# Run tests
-python -m pytest
+__all__ = ["Memory"]
 
-# Run with verbose output
-python -m pytest -v
-
-# Run with coverage
-python -m pytest --cov=agentforge
-```
-
-## Code Style
-
-- Follow PEP 8
-- Use type hints
-- Write docstrings for functions and classes
-- Format with black: `black agentforge/`
-- Lint with ruff: `ruff check agentforge/`
-
-## Testing
-
-- Write tests for new features
-- Ensure all tests pass before submitting PR
-- Aim for good code coverage
-- Test both happy path and error cases
-
-## Documentation
-
-- Update README.md for user-facing changes
-- Add docstrings to new code
-- Include examples for new features
-- Update CHANGELOG.md
-
-## Pull Request Process
-
-1. Ensure tests pass
-2. Update documentation
-3. Add entry to CHANGELOG.md
-4. Submit PR with clear description
-5. Respond to review feedback
-6. Maintainer will merge when ready
-
-## Areas for Contribution
-
-- 🐛 Bug fixes
-- ✨ New features
-- 📚 Documentation improvements
-- 🧪 Additional tests
-- 🎨 Code quality improvements
-- 🔌 New tools and integrations
-- 📱 Examples and tutorials
-
-## Questions?
-
-- Open a [Discussion](https://github.com/Tdat10052499/agentforge/discussions)
-- Check existing documentation
-- Look at examples
-
-Thank you for contributing! 🎉

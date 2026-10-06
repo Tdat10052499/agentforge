@@ -1,187 +1,188 @@
-"""Core agent implementation."""
+"""Tool definitions for agents."""
 
-from typing import Dict, List, Optional
-from .memory import Memory
-from .tools import Tool
+import os
+import subprocess
+from dataclasses import dataclass
+from typing import Callable
+
+import requests
 
 
-class Agent:
-    """An AI agent that can use tools and maintain memory."""
+@dataclass
+class Tool:
+    """A tool that an agent can use."""
+    name: str
+    description: str
+    func: Callable[[str], str]
 
-    def __init__(self, name: str, model: str = "gpt-4o-mini"):
-        """Initialize an agent.
-        
-        Args:
-            name: Agent name.
-            model: LLM model to use (for future integration).
-        """
-        self.name = name
-        self.model = model
-        self.tools: Dict[str, Tool] = {}
-        self.memory = Memory()
-        self.task_count = 0
+    def run(self, input_text: str) -> str:
+        try:
+            return self.func(input_text)
+        except Exception as exc:  # pragma: no cover - defensive branch
+            return f"Tool error: {type(exc).__name__}: {exc}"
 
-    def add_tool(self, tool: Tool) -> None:
-        """Add a tool to the agent.
-        
-        Args:
-            tool: Tool to add.
-        """
-        self.tools[tool.name] = tool
 
-    def remove_tool(self, tool_name: str) -> bool:
-        """Remove a tool from the agent.
-        
-        Args:
-            tool_name: Name of tool to remove.
-            
-        Returns:
-            True if tool was removed, False if not found.
-        """
-        if tool_name in self.tools:
-            del self.tools[tool_name]
-            return True
-        return False
+# Built-in tool implementations
 
-    def get_tools_description(self) -> str:
-        """Get descriptions of available tools.
-        
-        Returns:
-            Formatted tool descriptions.
-        """
-        if not self.tools:
-            return "No tools available."
-        
-        descriptions = ["Available tools:"]
-        for tool_name, tool in self.tools.items():
-            descriptions.append(f"  - {tool_name}: {tool.description}")
-        
-        return "\n".join(descriptions)
+def web_search_func(query: str) -> str:
+    """Search the web using DuckDuckGo's public API."""
+    if not query or not query.strip():
+        return "Web search requires a valid query."
 
-    def run(self, user_input: str) -> str:
-        """Run the agent on a task.
-        
-        Args:
-            user_input: Task or query for the agent.
-            
-        Returns:
-            Agent response.
-        """
-        self.task_count += 1
-        
-        # Add to memory
-        self.memory.add(user_input, role="user")
-        
-        # Thinking and tool selection
-        response = self._think_and_execute(user_input)
-        
-        # Add response to memory
-        self.memory.add(response, role="assistant")
-        
-        return response
+    normalized = query.strip()
+    if os.getenv("AGENTFORGE_USE_REAL_SEARCH", "1") != "1":
+        return f"Web search for: '{normalized}'\n\nThis is a demo fallback. Set AGENTFORGE_USE_REAL_SEARCH=1 to enable live search."
 
-    def _think_and_execute(self, user_input: str) -> str:
-        """Think about the task and execute appropriate tools.
-        
-        Args:
-            user_input: Task input.
-            
-        Returns:
-            Response from the agent.
-        """
-        lowered = user_input.lower()
-        
-        # Simple rule-based tool selection
-        # In production, this would be more sophisticated
-        
-        # Check for web search
-        if any(keyword in lowered for keyword in ["search", "find", "lookup", "latest", "news"]):
-            if "web_search" in self.tools:
-                result = self.tools["web_search"].run(user_input)
-                return self._format_response("web_search", result)
-        
-        # Check for file reading
-        if any(keyword in lowered for keyword in ["read", "open", "file", "load"]):
-            if "file_reader" in self.tools:
-                # Extract file path if provided
-                if "read:" in user_input:
-                    result = self.tools["file_reader"].run(user_input)
-                else:
-                    result = self.tools["file_reader"].run(f"read:{user_input}")
-                return self._format_response("file_reader", result)
-        
-        # Check for file writing
-        if any(keyword in lowered for keyword in ["write", "save", "store", "create file"]):
-            if "file_writer" in self.tools:
-                if "write:" in user_input:
-                    result = self.tools["file_writer"].run(user_input)
-                else:
-                    result = self.tools["file_writer"].run(f"write:{user_input}")
-                return self._format_response("file_writer", result)
-        
-        # Check for command execution
-        if any(keyword in lowered for keyword in ["run", "execute", "command"]):
-            if "command_runner" in self.tools:
-                result = self.tools["command_runner"].run(user_input)
-                return self._format_response("command_runner", result)
-        
-        # No tool matched - return default response
-        return self._default_response(user_input)
+    try:
+        response = requests.get(
+            "https://api.duckduckgo.com/",
+            params={
+                "q": normalized,
+                "format": "json",
+                "no_html": 1,
+                "skip_disambig": 1,
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        payload = response.json()
 
-    def _format_response(self, tool_name: str, tool_output: str) -> str:
-        """Format tool output as agent response.
-        
-        Args:
-            tool_name: Name of the tool used.
-            tool_output: Output from the tool.
-            
-        Returns:
-            Formatted response.
-        """
-        return f"[Using {tool_name}]\n\n{tool_output}"
+        abstract = payload.get("AbstractText")
+        abstract_url = payload.get("AbstractURL")
+        related_topics = payload.get("RelatedTopics", [])
 
-    def _default_response(self, user_input: str) -> str:
-        """Generate default response when no tool matches.
-        
-        Args:
-            user_input: The original user input.
-            
-        Returns:
-            Default response.
-        """
-        return f"""
-Agent '{self.name}' received task: "{user_input}"
+        if abstract:
+            result_lines = [f"Search results for: '{normalized}'", "", abstract]
+            if abstract_url:
+                result_lines.append(f"Source: {abstract_url}")
+            return "\n".join(result_lines)
 
-I don't have a tool that directly handles this request. 
+        if related_topics:
+            result_lines = [f"Search results for: '{normalized}'", ""]
+            for topic in related_topics[:5]:
+                text = topic.get("Text")
+                if text:
+                    result_lines.append(f"- {text}")
+            return "\n".join(result_lines)
 
-{self.get_tools_description()}
+        return f"No live results found for '{normalized}'."
+    except Exception as exc:
+        return (
+            f"Web search failed for '{normalized}' due to network or API error: {type(exc).__name__}: {exc}\n\n"
+            "Fallback: you can still use the tool in demo mode."
+        )
 
-Try using keywords like:
-  - "search" or "find" to use web search
-  - "read" to read files
-  - "write" or "save" to write files
-"""
 
-    def get_memory_summary(self) -> str:
-        """Get a summary of agent memory.
-        
-        Returns:
-            Memory summary.
-        """
-        return f"""
-Agent Memory Summary
-==================
-Agent: {self.name}
-Model: {self.model}
-Tasks completed: {self.task_count}
-Memory entries: {len(self.memory)}
-Tools available: {len(self.tools)}
-"""
+def file_reader_func(query: str) -> str:
+    """Read a file from the local filesystem."""
+    if not query.startswith("read:"):
+        return "Usage: read:/path/to/file.txt"
 
-    def __str__(self) -> str:
-        """String representation of agent."""
-        return f"Agent(name='{self.name}', model='{self.model}', tools={len(self.tools)})"
+    file_path = query.replace("read:", "", 1).strip()
+    if not file_path:
+        return "No file path was provided."
 
-    def __repr__(self) -> str:
-        """Detailed string representation."""
-        return self.__str__()
+    try:
+        with open(file_path, "r", encoding="utf-8") as file_handle:
+            content = file_handle.read()
+        return f"File contents of {file_path}:\n\n{content}"
+    except FileNotFoundError:
+        return f"File not found: {file_path}"
+    except Exception as exc:  # pragma: no cover - defensive branch
+        return f"Failed to read file: {file_path} ({type(exc).__name__}: {exc})"
+
+
+def file_writer_func(query: str) -> str:
+    """Write content to a file."""
+    if not query.startswith("write:"):
+        return "Usage: write:/path/to/file.txt:content"
+
+    payload = query.replace("write:", "", 1)
+    if ":" not in payload:
+        return "Usage: write:/path/to/file.txt:content"
+
+    file_path, content = payload.split(":", 1)
+    file_path = file_path.strip()
+    content = content.strip()
+
+    if not file_path:
+        return "No file path was provided."
+
+    try:
+        with open(file_path, "w", encoding="utf-8") as file_handle:
+            file_handle.write(content)
+        return f"Successfully wrote {len(content)} characters to {file_path}"
+    except Exception as exc:  # pragma: no cover - defensive branch
+        return f"Failed to write file: {file_path} ({type(exc).__name__}: {exc})"
+
+
+def command_runner_func(query: str) -> str:
+    """Run a secure, restricted system command."""
+    if os.getenv("AGENTFORGE_ENABLE_COMMANDS", "0") != "1":
+        return (
+            "Command execution is disabled in this version. "
+            "Set AGENTFORGE_ENABLE_COMMANDS=1 to allow it in a controlled environment."
+        )
+
+    allowed = ["echo", "python", "python3", "ls", "pwd"]
+    command = query.strip()
+    if not command:
+        return "No command was provided."
+
+    executable = command.split()[0]
+    if executable not in allowed:
+        return f"Command '{executable}' is not allowed by the whitelist."
+
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout.strip() or result.stderr.strip() or "Command returned no output."
+        return f"Command output:\n{output}"
+    except Exception as exc:  # pragma: no cover - defensive branch
+        return f"Command execution failed: {type(exc).__name__}: {exc}"
+
+
+WebSearchTool = Tool(
+    name="web_search",
+    description="Search the web for information",
+    func=web_search_func,
+)
+
+FileReaderTool = Tool(
+    name="file_reader",
+    description="Read and analyze a file. Example: read:/path/to/file.txt",
+    func=file_reader_func,
+)
+
+FileWriterTool = Tool(
+    name="file_writer",
+    description="Write content to a file. Example: write:/path/to/file.txt:content",
+    func=file_writer_func,
+)
+
+CommandRunnerTool = Tool(
+    name="command_runner",
+    description="Run a restricted system command",
+    func=command_runner_func,
+)
+
+DEFAULT_TOOLS = {
+    "web_search": WebSearchTool,
+    "file_reader": FileReaderTool,
+    "file_writer": FileWriterTool,
+    "command_runner": CommandRunnerTool,
+}
+
+__all__ = [
+    "Tool",
+    "WebSearchTool",
+    "FileReaderTool",
+    "FileWriterTool",
+    "CommandRunnerTool",
+    "DEFAULT_TOOLS",
+]

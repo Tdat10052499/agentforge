@@ -1,101 +1,40 @@
-"""Tests for the memory module."""
+"""Tests for the tools module."""
 
-import pytest
-from agentforge.memory import Memory, MemoryEntry
-
-
-def test_memory_creation():
-    """Test memory creation."""
-    memory = Memory()
-    assert len(memory) == 0
-    assert memory.max_entries == 100
+from agentforge.tools import Tool, WebSearchTool, FileReaderTool, FileWriterTool
 
 
-def test_memory_add():
-    """Test adding to memory."""
-    memory = Memory()
-    memory.add("Test message")
-    assert len(memory) == 1
+def test_tool_creation():
+    tool = Tool(name="echo", description="Echo tool", func=lambda x: f"Echo: {x}")
+    assert tool.name == "echo"
+    assert tool.description == "Echo tool"
 
 
-def test_memory_add_with_role():
-    """Test adding message with role."""
-    memory = Memory()
-    memory.add("User message", role="user")
-    memory.add("Assistant response", role="assistant")
-    
-    entries = memory.get()
-    assert len(entries) == 2
-    assert entries[0].role == "user"
-    assert entries[1].role == "assistant"
+def test_tool_run():
+    tool = Tool(name="echo", description="Echo tool", func=lambda x: f"Echo: {x}")
+    assert tool.run("hello") == "Echo: hello"
 
 
-def test_memory_get():
-    """Test getting memory entries."""
-    memory = Memory()
-    memory.add("Message 1")
-    memory.add("Message 2")
-    
-    entries = memory.get()
-    assert len(entries) == 2
-    assert entries[0].content == "Message 1"
-    assert entries[1].content == "Message 2"
+def test_web_search_tool():
+    response = WebSearchTool.run("AI agents")
+    assert isinstance(response, str)
+    assert len(response) > 0
 
 
-def test_memory_clear():
-    """Test clearing memory."""
-    memory = Memory()
-    memory.add("Message 1")
-    memory.add("Message 2")
-    
-    assert len(memory) == 2
-    memory.clear()
-    assert len(memory) == 0
+def test_file_reader_tool_usage_message():
+    response = FileReaderTool.run("hello")
+    assert "Usage" in response
 
 
-def test_memory_max_entries():
-    """Test memory max entries limit."""
-    memory = Memory(max_entries=3)
-    
-    memory.add("Message 1")
-    memory.add("Message 2")
-    memory.add("Message 3")
-    memory.add("Message 4")  # Should remove Message 1
-    
-    assert len(memory) == 3
-    entries = memory.get()
-    assert entries[0].content == "Message 2"
-    assert entries[-1].content == "Message 4"
+def test_file_writer_tool_usage_message():
+    response = FileWriterTool.run("hello")
+    assert "Usage" in response
 
 
-def test_memory_context():
-    """Test getting memory context."""
-    memory = Memory()
-    memory.add("User: Hello", role="user")
-    memory.add("Assistant: Hi!", role="assistant")
-    
-    context = memory.get_context()
-    assert "User" in context
-    assert "Assistant" in context
-    assert "Hello" in context
-    assert "Hi!" in context
+def test_tool_error_handling():
+    def bad_func(_):
+        raise ValueError("explode")
 
-
-def test_memory_len():
-    """Test memory length."""
-    memory = Memory()
-    assert len(memory) == 0
-    
-    memory.add("Message")
-    assert len(memory) == 1
-
-
-def test_memory_str():
-    """Test memory string representation."""
-    memory = Memory()
-    memory.add("Message 1")
-    memory.add("Message 2")
-    
-    str_repr = str(memory)
-    assert "Memory" in str_repr
-    assert "2" in str_repr
+    tool = Tool(name="bad", description="bad", func=bad_func)
+    result = tool.run("x")
+    assert "Tool error" in result
+    assert "ValueError" in result

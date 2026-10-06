@@ -1,162 +1,169 @@
-"""Tool definitions for agents."""
+# AgentForge
 
-from typing import Callable, Any
-from dataclasses import dataclass
+A polished open-source toolkit for building AI agents with tools, memory, and workflow automation.
 
+## Why AgentForge?
 
-@dataclass
-class Tool:
-    """A tool that an agent can use."""
-    name: str
-    description: str
-    func: Callable[[str], str]
+Most AI demos stop at simple chat. AgentForge gives developers the building blocks to create real agents that can:
 
-    def run(self, input_text: str) -> str:
-        """Execute the tool.
-        
-        Args:
-            input_text: Input to the tool.
-            
-        Returns:
-            Tool output.
-        """
-        try:
-            return self.func(input_text)
-        except Exception as e:
-            return f"Tool error: {str(e)}"
+- Search the web
+- Read and write files
+- Use memory across tasks
+- Run workflows
+- Call custom tools
+- Run locally or with LLM APIs
 
-    def __repr__(self) -> str:
-        return f"Tool(name='{self.name}')"
+This is designed for people who want to prototype agentic apps quickly without heavy boilerplate.
 
+## Project pitch
 
-# Built-in tool implementations
+AgentForge is an open-source framework for building AI agents that can think, call tools, remember context, and complete multi-step tasks.
 
-def web_search_func(query: str) -> str:
-    """Search the web for information.
-    
-    Args:
-        query: Search query.
-        
-    Returns:
-        Search results.
-    """
-    # Placeholder implementation
-    # In production, integrate with Google Search API, DuckDuckGo, or similar
-    return f"""
-    Web Search Results for: '{query}'
-    
-    Note: This is a placeholder. To enable real web search:
-    1. Install: pip install requests beautifulsoup4
-    2. Add API keys for search service
-    3. Implement actual search logic
-    
-    Example results that would appear:
-    - Result 1: ...
-    - Result 2: ...
-    - Result 3: ...
-    """
+## Features
 
+- Lightweight agent core
+- Tool registry system
+- Short-term memory
+- Web search tool (real implementation with fallback behavior)
+- File read/write tools
+- Command execution support with safeguards
+- Python-first API
+- CLI for quick demo usage
+- Extensible architecture for plugins and new tools
 
-def file_reader_func(query: str) -> str:
-    """Read and analyze files.
-    
-    Args:
-        query: File path or analysis request.
-        
-    Returns:
-        File contents or analysis.
-    """
-    try:
-        # Try to parse as file path
-        if query.startswith('read:'):
-            file_path = query.replace('read:', '').strip()
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return f"File contents of {file_path}:\n\n{content}"
-        else:
-            return f"File reader: Query '{query}' does not match expected format. Use 'read:/path/to/file'"
-    except FileNotFoundError:
-        return f"Error: File not found. Please check the path and try again."
-    except Exception as e:
-        return f"Error reading file: {str(e)}"
+## Installation
+
+```bash
+git clone https://github.com/Tdat10052499/agentforge.git
+cd agentforge
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+## Required environment variables
+
+Create a `.env` file or export variables in your shell:
+
+```bash
+export OPENAI_API_KEY=your-key-here
+export AGENTFORGE_MODEL=gpt-4o-mini
+export AGENTFORGE_ENABLE_COMMANDS=0
+export AGENTFORGE_USE_REAL_SEARCH=1
+```
+
+For local config, copy the example:
+
+```bash
+cp .env.example .env
+```
+
+## Quick start
+
+```python
+from agentforge import Agent, Tool
 
 
-def file_writer_func(query: str) -> str:
-    """Write content to files.
-    
-    Args:
-        query: Write command in format 'write:/path/to/file:content'.
-        
-    Returns:
-        Confirmation message.
-    """
-    try:
-        if query.startswith('write:'):
-            parts = query.replace('write:', '').split(':', 1)
-            if len(parts) == 2:
-                file_path, content = parts
-                file_path = file_path.strip()
-                content = content.strip()
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-                return f"Successfully wrote {len(content)} characters to {file_path}"
-        return "File writer: Query must be in format 'write:/path/to/file:content'"
-    except Exception as e:
-        return f"Error writing file: {str(e)}"
+def web_search(query: str) -> str:
+    return f"Search results for: {query}"
 
-
-def command_runner_func(query: str) -> str:
-    """Execute system commands.
-    
-    Args:
-        query: Command to execute.
-        
-    Returns:
-        Command output.
-    """
-    # Placeholder for security - actual implementation should have restrictions
-    return f"""
-    Command Runner: Received command '{query}'
-    
-    Note: Command execution is disabled in this version for security.
-    To enable command execution:
-    1. Review security implications
-    2. Add command whitelist
-    3. Implement proper sandboxing
-    4. Add audit logging
-    """
-
-
-# Create built-in tool instances
-
-WebSearchTool = Tool(
-    name="web_search",
-    description="Search the web for information",
-    func=web_search_func
+agent = Agent(name="research-agent")
+agent.add_tool(
+    Tool(
+        name="web_search",
+        description="Search the web for information",
+        func=web_search,
+    )
 )
 
-FileReaderTool = Tool(
-    name="file_reader",
-    description="Read and analyze files. Usage: 'read:/path/to/file'",
-    func=file_reader_func
-)
+result = agent.run("Find the latest AI agent frameworks and summarize them.")
+print(result)
+```
 
-FileWriterTool = Tool(
-    name="file_writer",
-    description="Write content to files. Usage: 'write:/path/to/file:content'",
-    func=file_writer_func
-)
+## CLI usage
 
-CommandRunnerTool = Tool(
-    name="command_runner",
-    description="Execute system commands (restricted)",
-    func=command_runner_func
-)
+```bash
+python -m agentforge.cli --agent research --task "What are the latest AI agent frameworks?"
+python -m agentforge.cli --agent file-analyzer --task "read:README.md"
+python -m agentforge.cli --agent workflow --task "Search for AI agent libraries and summarize the best options"
+```
 
-# Tool registry
-DEFAULT_TOOLS = {
-    "web_search": WebSearchTool,
-    "file_reader": FileReaderTool,
-    "file_writer": FileWriterTool,
-    "command_runner": CommandRunnerTool,
-}
+## Example agents
+
+- Research agent: searches the web and summarizes results
+- File analysis agent: reads files and summarizes content
+- Workflow agent: chains several actions together
+
+Examples are included in the `examples/` folder.
+
+## Architecture
+
+```text
+agentforge/
+├── __init__.py
+├── agent.py
+├── config.py
+├── memory.py
+├── tools.py
+├── cli.py
+├── examples/
+├── tests/
+├── README.md
+├── pyproject.toml
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── CONTRIBUTING.md
+├── LICENSE
+└── CHANGELOG.md
+```
+
+## Roadmap
+
+### v0.1
+- Agent core
+- Memory
+- Tool registry
+- File tools
+- CLI
+- Documentation
+
+### v0.2
+- OpenAI / Anthropic integration
+- Real search support
+- Workflow engine
+- More built-in tools
+
+### v0.3
+- OLLAMA local model support
+- Browser tool input/output
+- Better memory handling
+- More examples and tutorials
+
+### v1.0
+- Dashboard or UI
+- Multi-agent collaboration
+- Production deployment guides
+- Better plugin ecosystem
+
+## Contributing
+
+We welcome contributions.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and contribution guidelines.
+
+## License
+
+MIT License.
+
+## Acknowledgments
+
+Inspired by the open-source AI and automation ecosystem.
+
+## Star this project
+
+If you find AgentForge useful, give it a star and help it grow.
+
+---
+
+This project is still in early alpha, but the goal is to become a clean, practical tool that developers can use and discuss.
