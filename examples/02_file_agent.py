@@ -1,25 +1,19 @@
 #!/usr/bin/env python3
-"""Research agent example."""
+"""File analysis agent example."""
 
-from agentforge import Agent, WebSearchTool
+from agentforge import Agent, FileReaderTool, FileWriterTool
 
 
 def main():
-    agent = Agent(name="research-agent")
-    agent.add_tool(WebSearchTool)
+    agent = Agent(name="file-analyzer")
+    agent.add_tool(FileReaderTool)
+    agent.add_tool(FileWriterTool)
 
-    tasks = [
-        "Find the latest AI agent frameworks",
-        "Search for open-source AI tools",
-    ]
-
-    for task in tasks:
-        print(f"Task: {task}")
-        print("-" * 60)
-        print(agent.run(task))
-        print()
+    print("Creating demo file...")
+    agent.run("write:demo.txt:AgentForge is a tool for building AI agents.")
+    print("Reading the created file...")
+    print(agent.run("read:demo.txt"))
 
 
 if __name__ == "__main__":
     main()
-

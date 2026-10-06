@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
-"""File analysis agent example."""
+"""Workflow example."""
 
-from agentforge import Agent, FileReaderTool, FileWriterTool
+from agentforge import Agent
+from agentforge.tools import DEFAULT_TOOLS
 
 
 def main():
-    agent = Agent(name="file-analyzer")
-    agent.add_tool(FileReaderTool)
-    agent.add_tool(FileWriterTool)
+    agent = Agent(name="workflow-agent")
+    for tool in DEFAULT_TOOLS.values():
+        agent.add_tool(tool)
 
-    print("Creating demo file...")
-    agent.run("write:demo.txt:AgentForge is a tool for building AI agents.")
-    print("Reading the created file...")
-    print(agent.run("read:demo.txt"))
+    tasks = [
+        "Search for AI agent frameworks",
+        "Read demo.txt if it exists",
+    ]
+
+    for task in tasks:
+        print(f"Task: {task}")
+        print("-" * 60)
+        print(agent.run(task))
+        print()
 
 
 if __name__ == "__main__":
     main()
-
