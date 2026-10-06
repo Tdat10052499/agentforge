@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentforge"
+version = "0.1.0"
+description = "Open-source toolkit for building AI agents with tools, memory, and workflow automation"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "AgentForge Contributors" }
+]
+maintainers = [
+    { name = "Tdat10052499" }
+]
+license = { text = "MIT" }
+keywords = ["ai", "agents", "tools", "automation", "workflow", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Tdat10052499/agentforge"
+Documentation = "https://github.com/Tdat10052499/agentforge#readme"
+Repository = "https://github.com/Tdat10052499/agentforge.git"
+Issues = "https://github.com/Tdat10052499/agentforge/issues"
+
+[tool.setuptools]
+packages = ["agentforge"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39']
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
